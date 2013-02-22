@@ -14,13 +14,24 @@ class HttpCookie
     @port = port
   end
 
+  def post path, data
+    request Net::HTTP::Post, path, data
+  end
   def get path
+    request Net::HTTP::Get, path
+  end
+
+  def request type, path, data=nil
     http = Net::HTTP.new(@host, @port)
-    request = Net::HTTP::Get.new( path )
+    request = type.new( path )
+    request.set_form_data data unless data.nil?
     request['Cookie'] = @cookie
     request['Host'] = 'uts.pvta.com:81'
     request['Referer'] = 'http://uts.pvta.com:81/InfoPoint/'
     request['Accept'] = '*/*'
+    request['Origin'] = 'http://uts.pvta.com:81'
+    request['X-MicrosoftAjax'] = 'Delta=true'
+    debugger
     response = http.request request
     @cookie = extractCookieFrom response if response.key? 'set-cookie'
     puts '-------- Error --------' if response.code == "500"
@@ -31,12 +42,20 @@ class HttpCookie
     puts '-------- Setting Cookie --------'
     response['set-cookie'].split(';')[0]
   end
-
 end
+
 class PVTAHttpCookie < HttpCookie
   def initialize server
     super( server+'.pvta.com', 81 )
     get '/InfoPoint/'
+  end
+  def weird_post
+    post('/InfoPoint/default.aspx', {
+      'ScriptManager1' => 'ScriptManager|messageTimer',
+      '__EVENTTARGET' => 'messageTimer',
+      '__EVENTARGUMENT' => '',
+      '__VIEWSTATE' => '/wEPDwULLTE4MjY1ODc1MTUPZBYCAgMPZBYIAgMPFgweCXN0YXJ0bGF0cAUJNDIuNDMzODE0HglzdGFydGxuZ3AFCi03Mi42Mjk0NDUeCnN0YXJ0em9vbXAFAjEwHhFzaG93TWFwVHlwZUJ1dHRvbgUEdHJ1ZR4Xc21hbGxMYXJnZU5vbmVOYXZCdXR0b24FBXNtYWxsHhF1c2VTdG9wQ2x1c3RlcmluZwUEdHJ1ZWQCBQ8WAh4EaHJlZgUTaHR0cDovL3d3dy5wdnRhLmNvbWQCBw8WBB4JaW5uZXJodG1sZR4FY2xhc3MFGndhcm5pbmdNZXNzYWdlTm90RGlzcGxheWVkZAIZD2QWAmYPZBYCAgcPFgYeCXRpbWVob3VycwUCMTMeC3RpbWVtaW51dGVzBQIzOR4LdGltZXNlY29uZHMFATBkZIwOjceATon18L4/R2geZ8CvCxbz',
+      '__ASYNCPOST' => 'true' })
   end
 end
 
