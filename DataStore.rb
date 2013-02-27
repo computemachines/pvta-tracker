@@ -5,26 +5,25 @@ require_relative '../webapp/app/models/bus.rb'
 require_relative '../webapp/app/models/history.rb'
 require_relative '../webapp/app/models/scheduled_stop.rb'
 
-require_relative 'getData'
+module PVTA
+  class DataStore
 
-class DataStore
+    ActiveRecord::Base.establish_connection(
+                                            :adapter => 'sqlite3',
+                                            :database => '../webapp/db/development.sqlite3'
+                                            )
 
-  ActiveRecord::Base.establish_connection(
-    :adapter => 'sqlite3',
-    :database => '../webapp/db/development.sqlite3'
-  )
-
-  def Route
-    Route
-  end
-  def Bus
-    Bus
-  end
-  def Stop
-    Stop
-  end
-  def ScheduledStop
-    ScheduledStop
+    def Route
+      Route
+    end
+    def Bus
+      Bus
+    end
+    def Stop
+      Stop
+    end
+    def ScheduledStop
+      ScheduledStop
+    end
   end
 end
-
