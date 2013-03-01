@@ -36,6 +36,8 @@ module PVTA
             pp stop
           rescue
           end
+
+          route.stops << @data.Stop.find(stop.id)
         end
       end
       
