@@ -8,22 +8,30 @@ require 'ruby-debug'
 require 'net/http'
 require 'selenium-webdriver'
 require 'nokogiri'
+require_relative 'DataStore'
 
 # getStopData   stopId => [{:route, :destination, :edt, :sdt}, ...]
 # getRouteData  route => [{:stopId, :name, :position}, ...]
 # getBusData    route => [{:route, :busId, :GPS_position}, ...]
 module PVTA
   class DataSource
-    attr_accessor :cookie
-    def initialize
+    def cookie # invocation is treated as variable lvalue
+      return @cookie unless @cookie.nil?
+      
+      ds = DataStore.new
+      puts 'retrieving cookie'
+      dbCookie = ds.Cookie.last
       @cookie = {}
-      if ARGV[0] != 'test'
+      begin
+        @cookie = { 'uts' => dbCookie.uts, 'ntf' => dbCookie.ntf }
+        getStopData 1
+      rescue
+        puts 'Cookie failing, generating new cookie'
         @cookie['uts'] = getPVTACookie 'uts'
         @cookie['ntf'] = getPVTACookie 'ntf'
-      else
-        @cookie['uts'] = "sq20yorjw5lc0om25vvbxjfb"
-        @cookie['ntf'] = "s5bxtpuhrbcy0w45xx5czq45"
+        ds.Cookie.new(uts: @cookie['uts'], ntf: @cookie['ntf']).save
       end
+      return @cookie
     end
 
     def getHostByRoute route
@@ -60,7 +68,7 @@ module PVTA
       departures = departures.map do |departure|
         route, destination, sdt, edt = departure.xpath('./td/text()')
 
-        route = route.to_s.to_sym
+        route = route.to_s
         destination = CGI.unescapeHTML destination.to_s
         sdt, edt = sdt.to_s, edt.to_s
         begin; sdt = Time.parse sdt; rescue; end
@@ -73,10 +81,20 @@ module PVTA
     def getStopRawHTML server, stop
       req = Net::HTTP::Get.new "/InfoPoint/map/GetStopHtml.ashx?stopId=#{stop}"
       req['Referer'] = 'http://uts.pvta.com:81/InfoPoint/'
-      req['Cookie'] = "ASP.NET_SessionId=#{@cookie[server]}"
-      resp = Net::HTTP.start "#{server}.pvta.com", 81 do |http|
-        http.request req
+      req['Cookie'] = "ASP.NET_SessionId=#{cookie[server]}"
+      again = true
+      while again
+        begin
+          resp = Net::HTTP.start "#{server}.pvta.com", 81 do |http|
+            http.request req
+          end
+          again = false
+        rescue
+          puts "---------------- Connection Error ----------------"
+          sleep 60
+        end
       end
+      raise "Cookie Expired\n#{resp.body}" if resp.body =~ /Error/
       resp.body
     end
 
@@ -108,7 +126,7 @@ module PVTA
       stops.map do |stop|
         { id: stop['html'].to_i,
           name: stop['label'],
-          postion: [stop['lat'].to_f, stop['lng'].to_f] }
+          position: [stop['lat'].to_f, stop['lng'].to_f] }
       end
     end
   end

@@ -1,9 +1,11 @@
 
 require 'active_record'
-require_relative '../webapp/app/models/route.rb'
-require_relative '../webapp/app/models/bus.rb'
-require_relative '../webapp/app/models/history.rb'
-require_relative '../webapp/app/models/scheduled_stop.rb'
+require_relative '../webapp/app/models/route'
+require_relative '../webapp/app/models/bus'
+require_relative '../webapp/app/models/history'
+require_relative '../webapp/app/models/scheduled_stop'
+require_relative '../webapp/app/models/stop'
+require_relative '../webapp/app/models/cookie'
 
 module PVTA
   class DataStore
@@ -12,7 +14,9 @@ module PVTA
                                             :adapter => 'sqlite3',
                                             :database => '../webapp/db/development.sqlite3'
                                             )
-
+    def Cookie
+      Cookie
+    end
     def Route
       Route
     end
@@ -24,6 +28,9 @@ module PVTA
     end
     def ScheduledStop
       ScheduledStop
+    end
+    def History
+      History
     end
   end
 end
