@@ -9,30 +9,77 @@ require 'net/http'
 require 'selenium-webdriver'
 require 'nokogiri'
 require_relative 'DataStore'
+require 'logger'
 
-# getStopData   stopId => [{:route, :destination, :edt, :sdt}, ...]
-# getRouteData  route => [{:stopId, :name, :position}, ...]
-# getBusData    route => [{:route, :busId, :GPS_position}, ...]
+# getScheduleData(stopId) # [{:route, :destination, :edt, :sdt}, ...]
+# getRouteData(routeName) # [{:id, :name, :position}, ...]
+# getBusData(routeName) # {id: position, ...}
 module PVTA
   class DataSource
+    attr_accessor :log
+
+    def initialize _log=nil
+      @log = _log
+      @log = Logger.new STDOUT if @log.nil?
+    end
+
+    def getScheduleData(stop)
+      ['uts', 'ntf'].map do |s|
+        getStopDataFromServer(s, stop)
+      end.flatten 1
+    end
+
+    def getRouteData route
+      host = getHostByRoute route
+      path = "/InfoPoint/map/GetRouteXml.ashx?RouteId=#{route}"
+      log.info("HTTP getRouteData #{route}")
+      resp = Net::HTTP.get(URI(host+path))
+      xml = XmlSimple.xml_in(resp)
+      segments = xml['segments'] # KML of the route
+      stops = xml['stops'][0]['stop']
+
+      stops.map do |stop|
+        { id: stop['html'].to_i,
+          name: stop['label'],
+          position: [stop['lat'].to_f, stop['lng'].to_f] }
+      end
+    end
+
+    def getBusData route #uses xml
+      busPositions = {}
+      host = getHostByRoute route
+      path = "/InfoPoint/map/GetVehicleXml.ashx?RouteId=#{route}"
+      log.info("HTTP getBusData #{route}")
+      resp = Net::HTTP.get(URI(host+path))
+      vehicles = XmlSimple.xml_in(resp)['vehicle']
+      vehicles = [] if vehicles.nil?
+      vehicles.each do |bus|
+        busPositions[bus["name"].to_i] = 
+          [bus['lat'].to_f, bus['lng'].to_f]
+      end
+      busPositions
+    end
+
     def cookie # invocation is treated as variable lvalue
       return @cookie unless @cookie.nil?
       
       ds = DataStore.new
-      puts 'retrieving cookie'
+      log.info('retrieving cookie')
       dbCookie = ds.Cookie.last
       @cookie = {}
       begin
         @cookie = { 'uts' => dbCookie.uts, 'ntf' => dbCookie.ntf }
-        getStopData 1
-      rescue
-        puts 'Cookie failing, generating new cookie'
+        getScheduleData 1
+      rescue RuntimeError => e
+        log.info('Cookie failing, generating new cookie')
         @cookie['uts'] = getPVTACookie 'uts'
         @cookie['ntf'] = getPVTACookie 'ntf'
         ds.Cookie.new(uts: @cookie['uts'], ntf: @cookie['ntf']).save
       end
       return @cookie
     end
+
+
 
     def getHostByRoute route
       if route =~ /^[A-Z]/ 
@@ -55,12 +102,6 @@ module PVTA
       cookie
     end
     
-    def getStopData(stop)
-      ['uts', 'ntf'].map do |s|
-        getStopDataFromServer(s, stop)
-      end.flatten 1
-    end
-
     def getStopDataFromServer server, stop
       html = Nokogiri::HTML getStopRawHTML server, stop
 
@@ -85,12 +126,13 @@ module PVTA
       again = true
       while again
         begin
+          log.info("HTTP getStopRawHTML #{server}, #{stop}")
           resp = Net::HTTP.start "#{server}.pvta.com", 81 do |http|
             http.request req
           end
           again = false
         rescue
-          puts "---------------- Connection Error ----------------"
+          log.warn("Connection Error")
           sleep 60
         end
       end
@@ -98,36 +140,5 @@ module PVTA
       resp.body
     end
 
-    def getBusData route #uses xml
-      busPositions = []
-      host = getHostByRoute route
-      path = "/InfoPoint/map/GetVehicleXml.ashx?RouteId=#{route}"
-      resp = Net::HTTP.get(URI(host+path))
-      vehicles = XmlSimple.xml_in(resp)['vehicle']
-      vehicles = [] if vehicles.nil?
-      vehicles.each do |bus|
-        busPositions << {
-          route: route.to_s.to_sym, 
-          stopId: bus["name"].to_s.to_sym, 
-          position: [bus['lat'].to_f,bus['lng'].to_f]
-        }
-      end
-      busPositions
-    end
-
-    def getRouteData route
-      host = getHostByRoute route
-      path = "/InfoPoint/map/GetRouteXml.ashx?RouteId=#{route}"
-      resp = Net::HTTP.get(URI(host+path))
-      xml = XmlSimple.xml_in(resp)
-      segments = xml['segments'] # KML of the route
-      stops = xml['stops'][0]['stop']
-
-      stops.map do |stop|
-        { id: stop['html'].to_i,
-          name: stop['label'],
-          position: [stop['lat'].to_f, stop['lng'].to_f] }
-      end
-    end
   end
 end
