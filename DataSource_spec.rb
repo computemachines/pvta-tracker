@@ -1,4 +1,4 @@
-require './bustracker'
+require './DataSource'
 
 describe 'DataSource' do
   before :each do

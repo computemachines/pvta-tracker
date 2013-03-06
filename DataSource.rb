@@ -25,7 +25,7 @@ module PVTA
 
     def getScheduleData(stop)
       ['uts', 'ntf'].map do |s|
-        getStopDataFromServer(s, stop)
+        getScheduleDataFromServer(s, stop)
       end.flatten 1
     end
 
@@ -102,24 +102,28 @@ module PVTA
       cookie
     end
     
-    def getStopDataFromServer server, stop
-      html = Nokogiri::HTML getStopRawHTML server, stop
+    def getScheduleDataFromServer server, stop
+      html = Nokogiri::HTML getScheduleRawHTML server, stop
 
       departures = html.css('*[class*="DepartureGroup"]')
+
       departures = departures.map do |departure|
         route, destination, sdt, edt = departure.xpath('./td/text()')
 
         route = route.to_s
         destination = CGI.unescapeHTML destination.to_s
         sdt, edt = sdt.to_s, edt.to_s
-        begin; sdt = Time.parse sdt; rescue; end
-        begin; edt = Time.parse edt; rescue; end
-        
-        {route: route, destination: destination, sdt: sdt, edt: edt}
-      end
+        begin
+          sdt = Time.parse sdt
+          edt = Time.parse edt
+        rescue ArgumentError => e
+          {route: route, destination: destination, sdt: sdt, edt: edt}
+        end
+      end.compact
+
     end
 
-    def getStopRawHTML server, stop
+    def getScheduleRawHTML server, stop
       req = Net::HTTP::Get.new "/InfoPoint/map/GetStopHtml.ashx?stopId=#{stop}"
       req['Referer'] = 'http://uts.pvta.com:81/InfoPoint/'
       req['Cookie'] = "ASP.NET_SessionId=#{cookie[server]}"
