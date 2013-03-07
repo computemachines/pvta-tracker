@@ -23,6 +23,8 @@ module PVTA
 
       initialize_stops() if @data.Stop.count < 363
 
+      initialize_buses()
+
       updater = BusPositionUpdater.new @data, @source
       updater.start
     end
@@ -56,6 +58,17 @@ module PVTA
           end
 
           route.stops << @data.Stop.find(stop.id)
+        end
+      end
+    end
+    def initialize_buses
+      Route.all.each do |route|
+        busData = @source.getBusData route.name
+        busData.each do |busId, position|
+          bus = @data.Bus.new
+          bus.id = busId
+          bus.route = route
+          begin bus.save; rescue; end
         end
       end
     end
@@ -104,7 +117,7 @@ module PVTA
         def initialize id
           @id = id
           @min = 0; @max = Float::INFINITY
-          queryTimes = []
+          @queryTimes = []
           @thread = Thread.new do; end
           @thread.join
         end
@@ -115,10 +128,10 @@ module PVTA
       end
 
       def start
-        delay = 1.minute # starting delay
         buses = @data.Bus.all.map {|bus| Bus.new bus.id }
         
         while true
+          sleep 1
           buses.each do |bus| 
             if bus.thread.status == false
               bus.thread = makeThread( bus )
@@ -128,41 +141,59 @@ module PVTA
       end
 
       def computeNewDelay bus
+        1.minute
       end
 
       def makeThread(bus)
-        Thread.new(bus, computeNewDelay(bus)) do
-          sleep delay
-
-          bus.queryTimes << Time.now
-          if update_history_with_data @source.getBusData bus.id
-            t_n = bus.queryTimes[-1]
-            t_n_minus_2 = bus.queryTimes[-3]
-            bus.max = t_n - t_n_minus_2
-            Thread.current[:changed] = true
-          else
-            t_n = bus.queryTimes[-1]
-            t_n_minus_1 = bus.queryTimes[-2]
-            bus.min = t_n - t_n_minus_1
-            Thread.current[:changed] = false
+        Thread.new(bus, delay=computeNewDelay(bus)) do
+          begin
+            sleep delay
+            bus.queryTimes << Time.now
+            route = @data.Bus.find(bus.id).route.name
+            busData = @source.getBusData(route)[bus.id]
+            return false if busData.nil?
+            if update_history_with_data(bus.id, busData)
+              t_n = bus.queryTimes[-1]
+              t_n_minus_2 = bus.queryTimes[-3]
+              unless t_n.nil? or t_n_minus_2.nil?
+                bus.max = t_n - t_n_minus_2
+              end
+              Thread.current[:changed] = true
+            else
+              t_n = bus.queryTimes[-1]
+              t_n_minus_1 = bus.queryTimes[-2]
+              unless t_n.nil? or t_n_minus_2.nil?
+                bus.min = t_n - t_n_minus_1
+              end
+              Thread.current[:changed] = false
+            end
+          rescue Exception => e
+            sleep bus.id/1000.0
+            puts e
+            puts e.backtrace
+            sleep 1000
+            # require 'pry'
+            # binding.pry
           end
         end
       end
 
-      def update_history_with_data busData
-        lastHistory = @data.Bus.find(busData[:id]).histories.last
-        if [lastHistory.lat, lastHistory.lng] == busData[:position]
-          # gps hasn't updated yet, probably
-          return false
-        else
-          history = @data.History.new()
-          history.time = busData[:time]
-          history.lat = busData[:position][0]
-          history.lng = busData[:position][1]
-          history.bus_id = busData[:id]
-          history.save
-          return true
+      def update_history_with_data id, position
+        lastHistory = @data.Bus.find(id).histories.last
+        if not lastHistory.nil?
+          if (lastHistory.lat - position[0]).abs < 0.001 and
+              (lastHistory.lng - position[1]).abs < 0.001
+            # gps hasn't updated yet, or bus hasn't moved
+            return false
+          end
         end
+        history = @data.History.new()
+        history.time = Time.now
+        history.lat = position[0]
+        history.lng = position[1]
+        history.bus_id = id
+        history.save
+        return true
       end
       def bus_exist? busId
         begin
@@ -184,4 +215,4 @@ module PVTA
   end
 end
   
-  tracker = PVTA::Tracker.new
+tracker = PVTA::Tracker.new

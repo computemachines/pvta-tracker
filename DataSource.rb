@@ -50,7 +50,13 @@ module PVTA
       host = getHostByRoute route
       path = "/InfoPoint/map/GetVehicleXml.ashx?RouteId=#{route}"
       log.info("HTTP getBusData #{route}")
-      resp = Net::HTTP.get(URI(host+path))
+      resp = nil
+      while resp.nil?
+        begin
+        resp = Net::HTTP.get(URI(host+path))
+        rescue
+        end
+      end
       vehicles = XmlSimple.xml_in(resp)['vehicle']
       vehicles = [] if vehicles.nil?
       vehicles.each do |bus|
@@ -130,7 +136,7 @@ module PVTA
       again = true
       while again
         begin
-          log.info("HTTP getStopRawHTML #{server}, #{stop}")
+          log.info("HTTP getScheduleRawHTML #{server}, #{stop}")
           resp = Net::HTTP.start "#{server}.pvta.com", 81 do |http|
             http.request req
           end

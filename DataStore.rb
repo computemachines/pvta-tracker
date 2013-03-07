@@ -11,9 +11,16 @@ module PVTA
   class DataStore
 
     ActiveRecord::Base.establish_connection(
-                                            :adapter => 'sqlite3',
-                                            :database => '../webapp/db/development.sqlite3'
-                                            )
+      :adapter => 'mysql2',
+      :encoding => 'utf8',
+      :database => 'busTracker_dev',
+      :username => 'root',
+      :password => 'COcE64m96',
+      :host => 'localhost',
+      :pool => 50,
+      :reconnect => false
+    )
+
     def Cookie
       Cookie
     end

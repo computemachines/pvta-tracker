@@ -13,8 +13,7 @@ describe 'Bus Tracker' do
   end
 
   it 'should get a route by name' do
-    @tracker.route_from_name('B43').should_not be(nil)
-    @tracker.route_from_name('Not Real').should be(nil)
+    @tracker.class.route_from_name('B43').should_not   be(nil)
+    @tracker.class.route_from_name('Not Real').should   be(nil)
   end
-
 end
